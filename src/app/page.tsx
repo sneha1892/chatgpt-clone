@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useCopilotAction } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import "./style.css";
@@ -198,7 +197,7 @@ export default function Home() {
         setAvailableThreads(prev => [...prev]);
       }
     }
-  }, [messages.length, currentThreadId, isClient]);
+  }, [messages.length, currentThreadId, isClient, messages]);
  
   return (
     // We're using a flexbox layout for the sidebar and main content

@@ -9,7 +9,9 @@ import { NextRequest } from 'next/server';
 // Add this to debug
 console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
 
-const serviceAdapter = new OpenAIAdapter();
+const serviceAdapter = new OpenAIAdapter({
+  model: "gpt-4o-mini",
+});
 const runtime = new CopilotRuntime();
  
 export const POST = async (req: NextRequest) => {
