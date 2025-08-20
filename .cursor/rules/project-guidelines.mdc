@@ -1,0 +1,157 @@
+---
+alwaysApply: true
+description: Comprehensive project guidelines for the ChatGPT Clone Next.js application
+---
+
+# Project Guidelines - ChatGPT Clone
+
+## Project Overview
+This is a Next.js 15 application that creates a ChatGPT-style interface using CopilotKit for AI interactions. The project features a modern sidebar-based chat interface with thread management and persistent conversation history.
+
+## Key Files and Architecture
+
+### Core Application Structure
+- **Entry Point**: [src/app/layout.tsx](mdc:src/app/layout.tsx) - Root layout with CopilotKit provider setup
+- **Main Component**: [src/app/page.tsx](mdc:src/app/page.tsx) - Primary chat interface with sidebar and thread management
+- **API Integration**: [src/app/api/copilotkit/route.ts](mdc:src/app/api/copilotkit/route.ts) - CopilotKit runtime endpoint
+- **Configuration**: [package.json](mdc:package.json), [tsconfig.json](mdc:tsconfig.json), [next.config.ts](mdc:next.config.ts)
+
+## Technology Stack
+
+### Core Dependencies
+- **Framework**: Next.js 15 with App Router
+- **Runtime**: React 19 with TypeScript 5
+- **AI Integration**: CopilotKit (@copilotkit/react-core, @copilotkit/react-ui, @copilotkit/runtime)
+- **Styling**: Tailwind CSS 4 with custom CSS
+- **Build Tool**: Turbopack (via `next dev --turbopack`)
+- **Utilities**: UUID for unique thread generation
+
+### Development Tools
+- **Linting**: ESLint 9 with Next.js config
+- **Type Checking**: TypeScript with strict mode enabled
+- **Fonts**: Geist Sans and Geist Mono from Google Fonts
+
+## Coding Standards
+
+### TypeScript Guidelines
+- Always use strict TypeScript configuration
+- Prefer explicit type annotations for function parameters and return types
+- Use proper React.FC types for functional components
+- Leverage the `@/*` path alias for imports from src directory
+
+### React Best Practices
+- Use functional components with hooks exclusively
+- Implement proper error boundaries for CopilotKit components
+- Use `"use client"` directive for client-side components
+- Wrap CopilotKit components in Suspense for better loading states
+- Utilize useCallback and useMemo for performance optimization
+
+### State Management Patterns
+- Use localStorage for persistent thread and message storage
+- Implement proper client-side hydration checks with `isClient` state
+- Use CopilotKit's message context for chat state management
+- Follow the established pattern for thread management and switching
+
+### Styling Conventions
+- Combine Tailwind CSS classes with inline styles for component-specific styling
+- Use CSS custom properties (variables) defined in globals.css
+- Follow the established color scheme: primary green (#10a37f), neutral grays
+- Maintain consistent spacing and typography scales
+
+### Component Architecture
+- Keep the main page component focused on layout and state management
+- Extract reusable UI components when patterns emerge
+- Use proper TypeScript interfaces for props and state shapes
+- Implement proper event handling with preventDefault/stopPropagation where needed
+
+## File Organization
+
+### Directory Structure
+```
+src/
+  app/
+    api/copilotkit/     # CopilotKit API routes
+    layout.tsx          # Root layout with providers
+    page.tsx           # Main chat interface
+    globals.css        # Global styles
+    style.css          # Component-specific styles
+```
+
+### Naming Conventions
+- Use camelCase for variables and functions
+- Use PascalCase for React components and TypeScript interfaces
+- Use kebab-case for file names and CSS classes
+- Use UPPER_CASE for environment variables and constants
+
+## Development Workflow
+
+### Local Development
+- Use `npm run dev` to start development server with Turbopack
+- Enable CopilotKit dev console in development (`showDevConsole: true`)
+- Test thread management and persistence thoroughly
+- Verify responsive design across different screen sizes
+
+### Code Quality
+- Run `npm run lint` before committing changes
+- Ensure TypeScript compilation passes without errors
+- Test client-side hydration and localStorage functionality
+- Verify CopilotKit integration works correctly
+
+### Performance Considerations
+- Implement proper memoization for expensive operations
+- Use Suspense boundaries for async components
+- Optimize localStorage operations with proper error handling
+- Consider virtualization for large thread lists
+
+## Feature Implementation Guidelines
+
+### Thread Management
+- Generate unique thread IDs using UUID v4
+- Store thread data in localStorage with proper JSON serialization
+- Implement proper thread switching with message loading
+- Handle thread deletion with proper cleanup
+
+### Message Handling
+- Use CopilotKit message types (TextMessage, ActionExecutionMessage, ResultMessage)
+- Implement proper message persistence and restoration
+- Handle message parsing errors gracefully
+- Update thread names based on first user message content
+
+### UI/UX Standards
+- Follow ChatGPT-style sidebar design patterns
+- Implement hover states and transitions for interactive elements
+- Use consistent iconography (emojis for simplicity)
+- Ensure proper keyboard navigation and accessibility
+
+### Error Handling
+- Wrap localStorage operations in try-catch blocks
+- Provide fallback behavior for failed operations
+- Log errors appropriately for debugging
+- Maintain application stability during failures
+
+## Deployment and Build
+
+### Build Configuration
+- Use Next.js static optimization where possible
+- Ensure environment variables are properly configured
+- Test production builds locally before deployment
+- Verify CopilotKit runtime configuration in production
+
+### Environment Setup
+- Configure CopilotKit runtime URL appropriately
+- Set up proper CORS headers if needed
+- Ensure TypeScript compilation succeeds in CI/CD
+- Test application functionality in production environment
+
+## Security Considerations
+- Sanitize user input in chat messages
+- Implement proper CORS policies for API routes
+- Secure localStorage data appropriately
+- Follow CopilotKit security best practices
+
+## Future Enhancements
+- Consider implementing search functionality for threads
+- Add export/import capabilities for chat history
+- Implement user authentication and cloud sync
+- Add support for file uploads and multimedia messages
+- Consider implementing real-time collaboration features
