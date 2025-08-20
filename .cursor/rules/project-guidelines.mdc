@@ -6,22 +6,24 @@ description: Comprehensive project guidelines for the ChatGPT Clone Next.js appl
 # Project Guidelines - ChatGPT Clone
 
 ## Project Overview
-This is a Next.js 15 application that creates a ChatGPT-style interface using CopilotKit for AI interactions. The project features a modern sidebar-based chat interface with thread management and persistent conversation history.
+This is a Next.js 15 application that creates a ChatGPT-style interface using CopilotKit for AI interactions with a **custom Lambda API backend**. The project features a modern sidebar-based chat interface with thread management and persistent conversation history, integrated with a company's proprietary Lambda API instead of OpenAI.
 
 ## Key Files and Architecture
 
 ### Core Application Structure
 - **Entry Point**: [src/app/layout.tsx](mdc:src/app/layout.tsx) - Root layout with CopilotKit provider setup
 - **Main Component**: [src/app/page.tsx](mdc:src/app/page.tsx) - Primary chat interface with sidebar and thread management
-- **API Integration**: [src/app/api/copilotkit/route.ts](mdc:src/app/api/copilotkit/route.ts) - CopilotKit runtime endpoint
+- **Custom API Integration**: [src/app/api/copilotkit/route.ts](mdc:src/app/api/copilotkit/route.ts) - Custom Lambda API service adapter with complete CopilotServiceAdapter implementation
 - **Configuration**: [package.json](mdc:package.json), [tsconfig.json](mdc:tsconfig.json), [next.config.ts](mdc:next.config.ts)
+- **Integration Guide**: [LAMBDA_INTEGRATION_GUIDE.md](mdc:LAMBDA_INTEGRATION_GUIDE.md) - Comprehensive documentation for Lambda API integration
 
 ## Technology Stack
 
 ### Core Dependencies
 - **Framework**: Next.js 15 with App Router
 - **Runtime**: React 19 with TypeScript 5
-- **AI Integration**: CopilotKit (@copilotkit/react-core, @copilotkit/react-ui, @copilotkit/runtime)
+- **AI Integration**: CopilotKit (@copilotkit/react-core, @copilotkit/react-ui, @copilotkit/runtime) with custom Lambda API backend
+- **Custom API**: Lambda API (https://7uxm7jk4k3om3llfjjmcfgn6hi0uoovo.lambda-url.us-east-1.on.aws/) with x-orca-api-key authentication
 - **Styling**: Tailwind CSS 4 with custom CSS
 - **Build Tool**: Turbopack (via `next dev --turbopack`)
 - **Utilities**: UUID for unique thread generation
@@ -70,11 +72,12 @@ This is a Next.js 15 application that creates a ChatGPT-style interface using Co
 ```
 src/
   app/
-    api/copilotkit/     # CopilotKit API routes
+    api/copilotkit/     # Custom Lambda API service adapter with complete CopilotServiceAdapter implementation
     layout.tsx          # Root layout with providers
     page.tsx           # Main chat interface
     globals.css        # Global styles
     style.css          # Component-specific styles
+LAMBDA_INTEGRATION_GUIDE.md  # Comprehensive Lambda API integration documentation
 ```
 
 ### Naming Conventions
@@ -95,7 +98,10 @@ src/
 - Run `npm run lint` before committing changes
 - Ensure TypeScript compilation passes without errors
 - Test client-side hydration and localStorage functionality
-- Verify CopilotKit integration works correctly
+- Verify CopilotKit integration works correctly with custom Lambda API
+- Test Lambda API connectivity and response parsing
+- Verify proper authentication with x-orca-api-key header
+- Check console logs for detailed debugging information with emoji prefixes
 
 ### Performance Considerations
 - Implement proper memoization for expensive operations
@@ -104,6 +110,19 @@ src/
 - Consider virtualization for large thread lists
 
 ## Feature Implementation Guidelines
+
+### Custom Lambda API Integration
+- **Service Adapter**: Implement complete CopilotServiceAdapter interface with all required methods:
+  - `process()` - Main processing method for Lambda API calls
+  - `createChatCompletion()` - Required interface method (delegates to process)
+  - `chatCompletion()` - Required interface method (delegates to process)
+  - `streamChatCompletion()` - Required interface method (delegates to process)
+  - `listModels()` - Returns available models (gpt-4.1)
+- **Request Format**: Transform CopilotKit messages to Lambda API format with thinking parameter, organisation_id, and metadata
+- **Response Parsing**: Parse JSON response from Lambda API and extract content from "output" field
+- **Authentication**: Use x-orca-api-key header for Lambda API authentication
+- **Error Handling**: Comprehensive logging with emoji prefixes for easy debugging
+- **Model Configuration**: Use gpt-4.1 model with thinking enabled and 10000 token budget
 
 ### Thread Management
 - Generate unique thread IDs using UUID v4
@@ -116,6 +135,7 @@ src/
 - Implement proper message persistence and restoration
 - Handle message parsing errors gracefully
 - Update thread names based on first user message content
+- Transform Lambda API JSON responses to CopilotKit-compatible format
 
 ### UI/UX Standards
 - Follow ChatGPT-style sidebar design patterns
@@ -126,8 +146,11 @@ src/
 ### Error Handling
 - Wrap localStorage operations in try-catch blocks
 - Provide fallback behavior for failed operations
-- Log errors appropriately for debugging
+- Log errors appropriately for debugging with detailed error context
 - Maintain application stability during failures
+- **Lambda API Error Handling**: Comprehensive error logging for API failures with status codes and response details
+- **Service Adapter Errors**: Proper error propagation to CopilotKit with detailed error information
+- **Response Parsing Errors**: Graceful fallback when JSON parsing fails, treating response as plain text
 
 ## Deployment and Build
 
@@ -148,6 +171,9 @@ src/
 - Implement proper CORS policies for API routes
 - Secure localStorage data appropriately
 - Follow CopilotKit security best practices
+- **Lambda API Security**: API key (pEr1hFWdiKAUNKzVxxjmQjN2WYJVn3Vs) stored securely in service adapter
+- **Authentication Headers**: Proper x-orca-api-key header implementation for Lambda API calls
+- **Request Validation**: Validate message format and content before sending to Lambda API
 
 ## Future Enhancements
 - Consider implementing search functionality for threads

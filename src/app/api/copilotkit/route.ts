@@ -5,6 +5,7 @@ import {
   } from '@copilotkit/runtime';
   
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'crypto';
 
 // Custom Lambda API Service Adapter implementing all required methods
 class CustomLambdaAdapter implements CopilotServiceAdapter {
@@ -16,7 +17,8 @@ class CustomLambdaAdapter implements CopilotServiceAdapter {
     console.log('🚀 CustomLambdaAdapter.process() called');
     console.log('📥 Received forwardedProps:', JSON.stringify(forwardedProps, null, 2));
     
-    const { messages, model = "gpt-4.1" } = forwardedProps;
+    const { messages, model = "gpt-4.1", eventSource, threadId: incomingThreadId } = forwardedProps;
+    const threadId = incomingThreadId || randomUUID();
     
     console.log(`📋 Processing ${messages?.length || 0} messages with model: ${model}`);
     
@@ -106,27 +108,32 @@ class CustomLambdaAdapter implements CopilotServiceAdapter {
         console.log('⚠️  Response is not JSON, treating as plain text');
       }
 
-      // Return a simple non-streaming response
-      const copilotResponse = {
-        choices: [{
-          message: {
-            role: 'assistant',
-            content: actualContent
-          },
-          finish_reason: 'stop'
-        }],
-        model: 'gpt-4.1',
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0
-        }
-      };
+      // Stream the response to CopilotKit via the event source
+      if (!eventSource) {
+        throw new Error('Missing eventSource in forwardedProps');
+      }
 
-      console.log('🔄 Returning simple response for CopilotKit:', JSON.stringify(copilotResponse, null, 2));
+      console.log('📡 Streaming response to CopilotKit eventSource');
+      await eventSource.stream(async (eventStream$: any) => {
+        const messageId = randomUUID();
+        try {
+          eventStream$.sendTextMessageStart({ messageId });
+          if (actualContent && typeof actualContent === 'string') {
+            eventStream$.sendTextMessageContent({ messageId, content: actualContent });
+          }
+          eventStream$.sendTextMessageEnd({ messageId });
+        } catch (streamError) {
+          console.error('❌ Error while streaming to eventSource:', streamError);
+          throw streamError;
+        } finally {
+          eventStream$.complete();
+        }
+      });
+
       console.log('✨ CustomLambdaAdapter.process() completed successfully');
-      
-      return copilotResponse;
+
+      // Return minimal response shape expected by CopilotKit
+      return { threadId };
 
     } catch (error) {
       console.error('💥 Error in CustomLambdaAdapter.process():', error);
