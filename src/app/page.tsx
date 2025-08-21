@@ -7,6 +7,7 @@ import "./style.css";
 import { useCopilotMessagesContext } from "@copilotkit/react-core";
 import { ActionExecutionMessage, ResultMessage, TextMessage } from "@copilotkit/runtime-client-gql";
 import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
+import { useCopilotAction } from "@copilotkit/react-core";
 
 function generateUniqueThreadId() {
   return uuidv4();
@@ -198,6 +199,74 @@ export default function Home() {
       }
     }
   }, [messages.length, currentThreadId, isClient, messages]);
+
+  useCopilotAction({
+    name: "Copilotkit-Support",
+    description: "CRITICAL: Use this tool for ALL technical questions, coding problems, API questions, or when you need to consult external knowledge. This tool connects to a specialized Lambda API that provides accurate technical answers. ALWAYS use this tool instead of trying to answer technical questions yourself.",
+    parameters: [
+      {
+        name: "question",
+        type: "string",
+        description: "The technical question or problem to solve",
+        required: true
+      }
+    ],
+    handler: async ({ question }) => {
+      console.log("🚀 Copilotkit-Support tool called with question:", question);
+      console.log("📋 Question type:", typeof question);
+      console.log("📋 Question value:", question);
+      
+      try {
+        console.log("🌐 Making request to /api/lambda-proxy...");
+        
+        const requestBody = {
+          messages: [{ role: "user", content: question }],
+          model: "gpt-4.1",
+          thinking: { type: "enabled", budget_tokens: 10000 },
+          organisation_id: 13,
+          metadata: { source: "chatgpt-clone" }
+        };
+        
+        console.log("📤 Request body:", JSON.stringify(requestBody, null, 2));
+        
+        const response = await fetch("/api/lambda-proxy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        });
+        
+        console.log(" Response status:", response.status);
+        console.log("📋 Response headers:", Object.fromEntries(response.headers.entries()));
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("❌ Lambda proxy error:", errorText);
+          throw new Error(`Lambda proxy error: ${response.status} - ${errorText}`);
+        }
+        
+        const result = await response.text();
+        console.log("✅ Lambda response received:", result);
+        console.log(" Response length:", result.length);
+        console.log("📝 Response preview:", result.substring(0, 200) + (result.length > 200 ? "..." : ""));
+        
+        return result;
+      } catch (error) {
+        console.error(" Error in askLambda handler:", error);
+        console.error("🔍 Error details:", {
+          name: error instanceof Error ? error.name : "Unknown",
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        throw error;
+      }
+    }
+  });
+ 
+  // Add this after useCopilotAction to debug
+  useEffect(() => {
+    console.log("🚀 Copilotkit-Support tool registered");
+    console.log("📋 Available tools:", window.__COPILOTKIT__?.actions || "No actions found");
+  }, []);
  
   return (
     // We're using a flexbox layout for the sidebar and main content
@@ -408,13 +477,13 @@ export default function Home() {
           {isClient && currentThreadId && (
             <div className="absolute inset-0 p-4">
               <CopilotChat
-              imageUploadsEnabled={true}
-              inputFileAccept="image/png,image/jpeg"
+                imageUploadsEnabled={true}
+                inputFileAccept="image/png,image/jpeg"
                 key={currentThreadId}
-                instructions="You are a helpful assistant. You can help the user with their questions and tasks."
+                instructions="You are a helpful assistant. CRITICAL INSTRUCTION: You have access to a 'Copilotkit-Support' tool that provides accurate technical answers. You MUST use this tool for ANY technical question, coding problem, or when you need external knowledge. Never try to answer technical questions without using this tool first."
                 labels={{
                   title: "Todo Assistant",
-                  initial: "Hi! How I can help you today?",
+                  initial: "Hi! How I can help you today? I have access to technical support tools when you need them.",
                 }}
                 className="h-full w-full rounded-lg"
               />
