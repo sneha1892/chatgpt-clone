@@ -202,7 +202,9 @@ export default function Home() {
 
   useCopilotAction({
     name: "Copilotkit-Support",
-    description: "CRITICAL: Use this tool for ALL technical questions, coding problems, API questions, or when you need to consult external knowledge. This tool connects to a specialized Lambda API that provides accurate technical answers. ALWAYS use this tool instead of trying to answer technical questions yourself.",
+    description: `CRITICAL: Use this tool for ALL technical questions, coding problems, API questions, or when you need to consult external knowledge. 
+    This tool connects to a specialized Lambda API that provides accurate technical answers. ALWAYS use this tool instead of trying to answer technical questions yourself.
+     KEEP Using this tool for ALL the follow up questions related to technical questions, coding problems, API questions, or when you need to consult external knowledge.`,
     parameters: [
       {
         name: "question",
