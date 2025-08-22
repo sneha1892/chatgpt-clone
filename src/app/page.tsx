@@ -216,6 +216,16 @@ export default function Home() {
       console.log("📋 Question type:", typeof question);
       console.log("📋 Question value:", question);
       
+      setMessages((prev: any[]) => [
+        ...prev,
+        new TextMessage({
+          id: uuidv4(),
+          role: "assistant",
+          content: "Calling Copilotkit Support...",
+          createdAt: new Date().toISOString(),
+        }),
+      ]);
+      
       try {
         console.log("🌐 Making request to /api/lambda-proxy...");
         
