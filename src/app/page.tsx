@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { CopilotChat } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import "./style.css";
@@ -8,6 +8,13 @@ import { useCopilotMessagesContext } from "@copilotkit/react-core";
 import { ActionExecutionMessage, ResultMessage, TextMessage } from "@copilotkit/runtime-client-gql";
 import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 import { useCopilotAction } from "@copilotkit/react-core";
+
+// Minimal global typing to allow debug access to CopilotKit actions
+declare global {
+  interface Window {
+    __COPILOTKIT__?: any;
+  }
+}
 
 function generateUniqueThreadId() {
   return uuidv4();
@@ -99,6 +106,8 @@ export default function Home() {
     
     if (!isClient) return;
     
+    console.log("[deleteThread] Deleting thread:", threadId);      // for debugging
+    
     // If deleting the current thread, switch to another thread
     if (threadId === currentThreadId) {
       const remainingThreads = availableThreads.filter(id => id !== threadId);
@@ -175,14 +184,19 @@ export default function Home() {
     }
   }, [currentThreadId, isClient]);
  
-  // save to local storage when messages change
   useEffect(() => {
+    // Only save messages if the current thread ID is valid
     if (isClient && currentThreadId && messages !== undefined) {
-      localStorage.setItem(`copilotkit-messages-${currentThreadId}`, JSON.stringify(messages));
-      console.log(`Saved ${messages.length} messages for thread: ${currentThreadId}`);
+      try {
+        // Serialize only the messages currently in the UI state
+        localStorage.setItem(`copilotkit-messages-${currentThreadId}`, JSON.stringify(messages));
+        console.log(`Saved ${messages.length} messages for current thread: ${currentThreadId}`);
+      } catch (error) {
+        console.error('Error saving messages:', error);
+      }
     }
   }, [messages, currentThreadId, isClient]);
- 
+
   // Effect to update thread names when messages change (only for first message)
   useEffect(() => {
     if (!isClient || !currentThreadId || !messages) return;
@@ -200,6 +214,78 @@ export default function Home() {
     }
   }, [messages.length, currentThreadId, isClient, messages]);
 
+  // --- NEW: Track originating thread for assistant messages at stream start ---
+  const assistantOriginRef = useRef<Map<string, string>>(new Map());
+  const seenAssistantIdsRef = useRef<Set<string>>(new Set());
+  // Track new user messages to correlate the next assistant message to the user's thread
+  const seenUserIdsRef = useRef<Set<string>>(new Set());
+  const pendingOriginsRef = useRef<Array<{ threadId: string }>>([]);
+  const didHydrateRef = useRef<boolean>(false);
+
+  // --- NEW: Per-thread operation state ---
+  type ThreadStatus = "idle" | "tool-calling" | "streaming";
+  const [threadStatusMap, setThreadStatusMap] = useState<Map<string, ThreadStatus>>(new Map());
+
+  const setThreadStatus = useCallback((threadId: string, status: ThreadStatus) => {
+    setThreadStatusMap(prev => {
+      const next = new Map(prev);
+      next.set(threadId, status);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isClient || !messages) return;
+
+    // On first hydration, mark all existing messages as seen but do not enqueue pending origins
+    if (!didHydrateRef.current) {
+      for (const m of messages as any[]) {
+        if (m?.id) {
+          if (m?.role === "assistant") seenAssistantIdsRef.current.add(m.id);
+          if (m?.role === "user") seenUserIdsRef.current.add(m.id);
+        }
+      }
+      console.log("[origin] hydrated seen sets: assistants:", seenAssistantIdsRef.current.size, "users:", seenUserIdsRef.current.size);
+      didHydrateRef.current = true;
+      return;
+    }
+
+    // Process newly seen messages
+    for (const m of messages as any[]) {
+      if (!m?.id) continue;
+
+      if (m.role === "user" && !seenUserIdsRef.current.has(m.id)) {
+        // First time we see this user message; capture the sender's thread
+        seenUserIdsRef.current.add(m.id);
+        pendingOriginsRef.current.push({ threadId: currentThreadId });
+        console.log(`[origin] user message seen id=${m.id} queued pending origin thread=${currentThreadId} queueLen=${pendingOriginsRef.current.length}`);
+        // Mark the sender's thread as tool-calling until we see the assistant start
+        setThreadStatus(currentThreadId, "tool-calling");
+        console.log(`[status] thread ${currentThreadId} -> tool-calling`);
+        continue;
+      }
+
+      if (m.role === "assistant" && !seenAssistantIdsRef.current.has(m.id)) {
+        // First time we see this assistant message; decide its origin
+        seenAssistantIdsRef.current.add(m.id);
+
+        // Prefer a pending user-origin if available; otherwise, use tool-start registration; finally, fallback to current thread
+        if (!assistantOriginRef.current.has(m.id)) {
+          const pending = pendingOriginsRef.current.shift();
+          const originThreadId = pending?.threadId ?? currentThreadId;
+          assistantOriginRef.current.set(m.id, originThreadId);
+          console.log(`[origin] assistant first seen id=${m.id} originChosen=${originThreadId} via=${pending ? "pending-user" : "fallback-current"}`);
+          // Status: assistant started streaming for origin thread
+          setThreadStatus(originThreadId, "streaming");
+          console.log(`[status] thread ${originThreadId} -> streaming (assistant started)`);
+        } else {
+          console.log(`[origin] assistant first seen id=${m.id} already registered origin=${assistantOriginRef.current.get(m.id)}`);
+        }
+        continue;
+      }
+    }
+  }, [messages, currentThreadId, isClient, setThreadStatus]);
+
   useCopilotAction({
     name: "Copilotkit-Support",
     description: `CRITICAL: Use this tool for ALL technical questions, coding problems, API questions, or when you need to consult external knowledge. 
@@ -214,31 +300,40 @@ export default function Home() {
       }
     ],
     handler: async ({ question }) => {
+      const originatingThreadId = currentThreadId;
+      console.log(`[debug] Tool call started for question: '${question}' on thread: ${originatingThreadId}`);
       console.log("🚀 Copilotkit-Support tool called with question:", question);
       console.log("📋 Question type:", typeof question);
       console.log("📋 Question value:", question);
       
-      setMessages((prev: any[]) => [
-        ...prev,
-        new TextMessage({
-          id: uuidv4(),
-          role: "assistant",
-          content: "Calling Copilotkit Support...",
-          createdAt: new Date().toISOString(),
-        }),
-      ]);
-      
+      // Capture the originating thread at tool start to ensure correct persistence later
+      setThreadStatus(originatingThreadId, "tool-calling");
+      console.log(`[status] thread ${originatingThreadId} -> tool-calling (tool start)`);
+ 
       try {
         console.log("🌐 Making request to /api/lambda-proxy...");
+      // Get conversation history from Copilotkit messages
+        const conversationHistory = messages.filter(
+          (msg: any) => msg.type === "TextMessage").map((msg: any) => ({
+            role: msg.role,
+            content: msg.content
+          }));
         
         const requestBody = {
-          messages: [{ role: "user", content: question }],
+          messages: [
+            { 
+              role: "system", 
+              content: "You must use codebase_tool and pass our chat to get the answer. Always use the codebase_tool when answering questions about code, technical issues, or when you need to search through codebases." 
+            },
+            ...conversationHistory, //full conversation history
+            { role: "user", content: question } //current user message
+          ],
           model: "gpt-4.1",
           thinking: { type: "enabled", budget_tokens: 10000 },
           organisation_id: 13,
-          metadata: { source: "chatgpt-clone" }
+          metadata: { source: "copilotkit codebase agent" }
         };
-        
+        console.log(`📤 Sending ${requestBody.messages.length} messages to lambda (${conversationHistory.length} from history + 1 current question)`);
         console.log("📤 Request body:", JSON.stringify(requestBody, null, 2));
         
         const response = await fetch("/api/lambda-proxy", {
@@ -247,6 +342,7 @@ export default function Home() {
           body: JSON.stringify(requestBody)
         });
         
+
         console.log(" Response status:", response.status);
         console.log("📋 Response headers:", Object.fromEntries(response.headers.entries()));
         
@@ -260,7 +356,56 @@ export default function Home() {
         console.log("✅ Lambda response received:", result);
         console.log(" Response length:", result.length);
         console.log("📝 Response preview:", result.substring(0, 200) + (result.length > 200 ? "..." : ""));
-        
+
+        // Try to extract human-readable output if the response is JSON
+        console.log(`[debug] Tool call completed. Current thread is: ${currentThreadId}. Originating thread was: ${originatingThreadId}`);
+        let assistantContent = result;
+        try {
+          const parsed = JSON.parse(result);
+          if (parsed && typeof parsed === "object" && typeof parsed.output === "string") {
+            assistantContent = parsed.output;
+            console.log("[format] extracted output field from JSON response for display");
+          }
+        } catch (_) {
+          // not JSON; keep raw text
+        }
+        if (currentThreadId !== originatingThreadId) {
+          console.warn("⚠️ THREAD SWITCH DETECTED! Assistant message will be saved to originating thread but UI will not be updated.");
+      }
+
+        // Create the assistant result message
+        const assistantResultMessage = new TextMessage({
+          id: uuidv4(),
+          role: "assistant",
+          content: assistantContent,
+          createdAt: new Date().toISOString(),
+        } as any);
+ 
+        // Register origin for this assistant message id if not already present
+        if (!assistantOriginRef.current.has(assistantResultMessage.id)) {
+          assistantOriginRef.current.set(assistantResultMessage.id, originatingThreadId);
+          console.log(`[origin] tool-complete registering assistant id=${assistantResultMessage.id} origin=${originatingThreadId}`);
+        }
+        // Mark streaming state now that we have the assistant response
+        setThreadStatus(originatingThreadId, "streaming");
+        console.log(`[status] thread ${originatingThreadId} -> streaming (tool complete)`);
+ 
+        // Persist to the originating thread regardless of the currently viewed thread
+        try {
+          const storageKey = `copilotkit-messages-${originatingThreadId}`;
+          const storedMessagesJSON = localStorage.getItem(storageKey);
+          const existing = storedMessagesJSON ? JSON.parse(storedMessagesJSON) : [];
+ 
+          // Store as plain objects to keep storage minimal
+          const candidate = { type: "TextMessage", id: assistantResultMessage.id, role: "assistant", content: assistantResultMessage.content, createdAt: assistantResultMessage.createdAt };
+          const toStore = [...existing.filter((m: any) => m?.id !== candidate.id), candidate];
+          localStorage.setItem(storageKey, JSON.stringify(toStore));
+          console.log(`✅ Persisted assistant result to originating thread: ${originatingThreadId}`);
+        } catch (persistError) {
+          console.error("❌ Error persisting assistant result to originating thread:", persistError);
+        }
+ 
+       
         return result;
       } catch (error) {
         console.error(" Error in askLambda handler:", error);
@@ -277,7 +422,7 @@ export default function Home() {
   // Add this after useCopilotAction to debug
   useEffect(() => {
     console.log("🚀 Copilotkit-Support tool registered");
-    console.log("📋 Available tools:", window.__COPILOTKIT__?.actions || "No actions found");
+    console.log("📋 Available tools:", (window as any).__COPILOTKIT__?.actions || "No actions found");
   }, []);
  
   return (
